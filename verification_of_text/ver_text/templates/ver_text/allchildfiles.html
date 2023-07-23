@@ -1,0 +1,11 @@
+{% extends 'ver_text/base.html' %}
+{% block title %}Страница все дочерние файлы{% endblock %}
+
+{% block content %}
+{% for child_file in child_files %}
+    <p>{{ child_file.id }}</p>
+    <p>{{ child_file.parent_id }}</p>
+    <p>{{ child_file.document }}</p>
+    <p>{{ child_file.upload_date }}</p>
+{% endfor %}
+{% endblock %}
