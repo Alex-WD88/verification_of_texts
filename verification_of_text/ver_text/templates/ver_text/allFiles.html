@@ -3,7 +3,7 @@
 
 {% block content %}
 {% for file in files %}
-    <p>{{ file.id }}</p>
+<!--    <p>{{ file.id }}</p>-->
     <p>{{ file.document }}</p>
     <p>{{ file.upload_date }}</p>
 <a href="/file/{{ file.id }}">{{ file.document }}</a>

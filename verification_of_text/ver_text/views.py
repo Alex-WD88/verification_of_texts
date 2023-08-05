@@ -15,15 +15,20 @@ def upload(request):
 
 
 def file(request, id):
-    file = models.File.objects.filter(id=id)
-    if request.method == 'POST':
-        child_file = models.Child_file()
-        child_file.parent_id = id
-        child_file.document = request.FILES['document']
-        child_file.save()
-        return redirect('/')
+    file = models.File.objects.get(id=id)
+    child_files = models.ChildFile.objects.filter(parent=file)
 
-    return render(request, 'ver_text/file.html', {'file': file[0]})
+    if request.method == 'POST':
+        child_files = models.ChildFile()
+        child_files.parent = file
+
+        if 'document' in request.FILES:
+            child_files.document = request.FILES['document']
+
+        child_files.save()
+        return redirect('file', id=file.id)
+
+    return render(request, 'ver_text/file.html', {'file': file, 'child_files': child_files})
 
 
 def all_file(request):
@@ -32,9 +37,19 @@ def all_file(request):
 
 
 def all_child_files(request):
-    child_files = models.Child_file.objects.all()
+    child_files = models.ChildFile.objects.all()
     return render(request, 'ver_text/allchildfiles.html', {'child_files': child_files})
 
+# def file(request, id):
+#     file = models.File.objects.filter(id=id)
+#     if request.method == 'POST':
+#         child_file = models.Child_file()
+#         child_file.parent_id = id
+#         child_file.document = request.FILES['document']
+#         child_file.save()
+#         return redirect('/')
+#
+#     return render(request, 'ver_text/file.html', {'file': file[0]})
 
 # def compare(request, id):
 #     file1 = File.objects.get(id=id)
