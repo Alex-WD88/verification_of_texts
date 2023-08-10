@@ -3,6 +3,16 @@
 
 {% block content %}
 
-
+{% for diff in diffs %}
+    {% for line in diff %}
+        {% if '-' in line %}
+            <p style="color: red;">{{ line }}</p>
+        {% elif '+' in line %}
+            <p style="color: green;">{{ line }}</p>
+        {% else %}
+            <p>{{ line }}</p>
+        {% endif %}
+    {% endfor %}
+{% endfor %}
 
 {% endblock %}
