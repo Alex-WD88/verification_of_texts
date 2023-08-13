@@ -3,7 +3,9 @@ from .models import File, ChildFile
 import difflib
 import chardet
 from PyPDF2 import PdfFileReader
-from django.http import HttpResponse
+import textract
+from docx import Document
+from openpyxl import load_workbook
 from . import models
 
 
@@ -47,13 +49,11 @@ def compare(request, id):
     file = File.objects.get(id=id)
     child_files = ChildFile.objects.filter(parent=file)
 
-    # Сравнить содержимое File и ChildFile
     diffs = []
     for child_file in child_files:
         diff = compare_files(file.document.path, child_file.document.path)
         diffs.append(diff)
 
-    # Создать словарь diff с правильными значениями для ключей 'equal' и 'replace'
     diff = {
         0: {'equal': 'Совпадение'},
         1: {'replace': 'Замена'}
@@ -64,13 +64,32 @@ def compare(request, id):
 
 
 def compare_files(file1_path, file2_path):
+    file1_extension = file1_path.split('.')[-1].lower()
+    file2_extension = file2_path.split('.')[-1].lower()
+
+    if file1_extension == 'txt' or file2_extension == 'txt':
+        # Если один из файлов - текстовый файл, использовать существующую логику
+        return compare_text_files(file1_path, file2_path)
+    elif file1_extension == 'pdf' and file2_extension == 'pdf':
+        # Если оба файла являются PDF-файлами, сравнить их содержимое
+        return compare_pdf_files(file1_path, file2_path)
+    elif file1_extension in ['doc', 'docx'] and file2_extension in ['doc', 'docx']:
+        # Если оба файла являются Word-документами, сравнить их содержимое
+        return compare_word_documents(file1_path, file2_path)
+    elif file1_extension in ['xls', 'xlsx'] and file2_extension in ['xls', 'xlsx']:
+        # Если оба файла являются Excel-файлами, сравнить их содержимое
+        return compare_excel_files(file1_path, file2_path)
+    else:
+        return "Unsupported file format"
+
+
+def compare_text_files(file1_path, file2_path):
     # Определить кодировку файлов
     file1_encoding = detect_encoding(file1_path)
     file2_encoding = detect_encoding(file2_path)
 
     # Открыть и прочитать оба файла с определенной кодировкой
-    with open(file1_path, 'r', encoding=file1_encoding) as file1, open(file2_path, 'r',
-                                                                       encoding=file2_encoding) as file2:
+    with open(file1_path, 'r', encoding=file1_encoding) as file1, open(file2_path, 'r', encoding=file2_encoding) as file2:
         file1_content = file1.readlines()
         file2_content = file2.readlines()
 
@@ -82,29 +101,55 @@ def compare_files(file1_path, file2_path):
 
 
 def compare_pdf_files(file1_path, file2_path):
-    # Открыть PDF-файлы
-    with open(file1_path, 'rb') as file1, open(file2_path, 'rb') as file2:
-        pdf1 = PdfFileReader(file1)
-        pdf2 = PdfFileReader(file2)
+    # Извлечь текст из PDF-файлов
+    text1 = textract.process(file1_path).decode('utf-8')
+    text2 = textract.process(file2_path).decode('utf-8')
 
-        # Получить количество страниц в каждом PDF-файле
-        num_pages_pdf1 = pdf1.getNumPages()
-        num_pages_pdf2 = pdf2.getNumPages()
+    # Использовать difflib для сравнения содержимого PDF-файлов
+    diff = difflib.Differ()
+    diff_result = list(diff.compare(text1.splitlines(), text2.splitlines()))
 
-        # Создать список для хранения результатов сравнения
-        diff_result = []
+    return diff_result
 
-        # Сравнивать страницы по одной
-        for page_num in range(min(num_pages_pdf1, num_pages_pdf2)):
-            page_pdf1 = pdf1.getPage(page_num).extractText()
-            page_pdf2 = pdf2.getPage(page_num).extractText()
 
-            # Использовать difflib для сравнения содержимого страниц
-            diff = difflib.Differ()
-            page_diff_result = list(diff.compare(page_pdf1.splitlines(), page_pdf2.splitlines()))
+def compare_word_documents(file1_path, file2_path):
+    # Открыть оба Word-документа
+    doc1 = Document(file1_path)
+    doc2 = Document(file2_path)
 
-            # Добавить результат сравнения страницы в общий список результатов
-            diff_result.extend(page_diff_result)
+    # Получить содержимое параграфов Word-документов
+    text1 = ''
+    text2 = ''
+    for para in doc1.paragraphs:
+        text1 += para.text
+    for para in doc2.paragraphs:
+        text2 += para.text
+
+    # Использовать difflib для сравнения содержимого Word-документов
+    diff = difflib.Differ()
+    diff_result = list(diff.compare(text1.splitlines(), text2.splitlines()))
+
+    return diff_result
+
+
+def compare_excel_files(file1_path, file2_path):
+    # Открыть оба Excel-файла
+    workbook1 = load_workbook(file1_path)
+    workbook2 = load_workbook(file2_path)
+
+    # Получить содержимое строк Excel-файлов
+    rows1 = []
+    rows2 = []
+    for sheet in workbook1.sheetnames:
+        for row in workbook1[sheet].iter_rows(values_only=True):
+            rows1.append(row)
+    for sheet in workbook2.sheetnames:
+        for row in workbook2[sheet].iter_rows(values_only=True):
+            rows2.append(row)
+
+    # Использовать difflib для сравнения содержимого Excel-файлов
+    diff = difflib.Differ()
+    diff_result = list(diff.compare([str(row) for row in rows1], [str(row) for row in rows2]))
 
     return diff_result
 
@@ -113,8 +158,11 @@ def detect_encoding(file_path):
     with open(file_path, 'rb') as file:
         byte_data = file.read()
 
-    encoding = chardet.detect(byte_data)['encoding']
-    if encoding is None:  # Если chardet не удалось определить кодировку
+    result = chardet.detect(byte_data)
+    encoding = result['encoding']
+    confidence = result['confidence']
+
+    if not encoding or confidence < 0.8:
         encoding = 'utf-8'  # Используйте кодировку utf-8 по умолчанию
 
     return encoding

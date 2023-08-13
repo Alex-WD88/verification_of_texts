@@ -161,3 +161,4 @@ cython_debug/
 verification_of_text/documents/*
 verification_of_text/child_files/*
 verification_of_text/ver_text/migrations/*
+!verification_of_text/ver_text/migrations/__init__.py
